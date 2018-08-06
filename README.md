@@ -1,14 +1,14 @@
 # Habitat resource
 
-a Concourse resource for publishing Habitat artifacts.
+A Concourse resource for publishing Habitat artifacts.
 
 ## Source configuration
 
 * `origin`: _Required_ the package origin
 * `name`: _Required_ the package name
-* `version`: _Optional_ the package version
 * `auth_token`: _Optional_ the token to authenticate with the depot. Required when uploading packages.
 * `channel`: _Optional_ the channel to check defaults to 'unstable'.
+* `bldr_url`: _Optional_ the root url to the bldr instance. Defaults to `https://bldr.habitat.sh`
 
 ### Example
 
@@ -20,6 +20,7 @@ a Concourse resource for publishing Habitat artifacts.
     name: consul
     origin: core
     type: hab-pkg
+    bldr_url: https://bldr.mycompany.com
 resource_types:
 - name: hab-pkg
   source:

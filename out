@@ -9,12 +9,16 @@ set +x
 
 payload=$(mktemp /tmp/resource-in.XXXXXX)
 keys_cache=$(mktemp /tmp/hab_cache_keys_path.XXXXXX)
-trap "rm -f ${keys_cahce}" INT QUIT TERM EXIT
+trap "rm -f ${keys_cache}" INT QUIT TERM EXIT
 export HAB_CACHE_KEYS_PATH=${keys_cache}
 
 
 cat > "${payload}" <&0
 
+bldr_url="$(jq -r '.source.bldr_url // ""' < "${payload}")"
+if [[ ${bldr_url} = "" ]]; then
+  bldr_url="https://bldr.habitat.sh"
+fi
 origin="$(jq -r '.source.origin' < "${payload}")"
 name="$(jq -r '.source.name' < "${payload}")"
 channel="$(jq -r '.params.channel // ""' < "${payload}")"
@@ -24,21 +28,45 @@ fi
 
 echo "Pushing to channel '${channel}'"
 
+export HAB_BLDR_URL=${bldr_url}
 export HAB_ORIGIN=${origin}
-export HAB_AUTH_TOKEN="$(jq -r '.source.auth_token' < "${payload}")"
+HAB_AUTH_TOKEN="$(jq -r '.source.auth_token' < "${payload}")"
+export HAB_AUTH_TOKEN
 
-hab origin key download ${origin}
+hab origin key download "${origin}"
 
 result="$(jq -r '.params.result' < "${payload}")"
 cd "${1}/${result}"
 
 file=$(ls *.hart)
-pkg=${file/-x86_64-linux.hart}
-pkg=${pkg#$origin-$name-}
-pkg="${origin}/${name}/$(echo ${pkg} | sed "s#-#/#g")"
 
-hab pkg upload -c "${channel}" $file
+# Check to make sure we got back one .hart file only
+if [ "$(echo "${file}" | wc -l)" != 1 ]; then
+  echo "More than one .hart file was found in the input:" >&2
+  echo "${file}" >&2
+  exit 1
+fi
 
-jq -n --arg pkg "${pkg}" '{version: { pkg: $pkg }}' >&3
+ident=$(hab pkg info "${file}" -j)
+
+# Check origins match
+hart_origin="$(echo "${ident}" | jq -r '.origin')"
+if [ "${hart_origin}" != "${origin}" ]; then
+  echo "Origin of .hart file: ${hart_origin} does not match specified: ${origin}"
+fi
+
+# Check names match
+hart_name="$(echo "${ident}" | jq -r '.name')"
+if [ "${hart_name}" != "${name}" ]; then
+  echo "Name of .hart file: ${hart_name} does not match specified: ${name}"
+fi
+
+version="$(echo "${ident}" | jq -r '.version')"
+release="$(echo "${ident}" | jq -r '.release')"
+pkg="$(echo "${ident}" | jq -r '[ .origin, .name, .version, .release ] | join("/")')"
+
+hab pkg upload -c "${channel}" "${file}"
+
+jq -n --arg pkg "${pkg}" --arg origin "${hart_origin}" --arg name "${hart_name}" --arg version "${version}" --arg release "${release}" '{version: { pkg: $pkg, origin: $origin, name: $name, version: $version, release: $release }}' >&3
 
 hab pkg promote "${pkg}" "${channel}"

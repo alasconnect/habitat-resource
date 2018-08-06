@@ -11,12 +11,26 @@ payload=$(mktemp /tmp/resource-in.XXXXXX)
 
 cat > "${payload}" <&0
 
-base_uri="https://willem.habitat.sh/v1/depot/pkgs"
+bldr_url="$(jq -r '.source.bldr_url // ""' < "${payload}")"
+if [[ ${bldr_url} != "" ]]; then
+  base_uri="${bldr_url}/v1/depot"
+else
+  base_uri="https://bldr.habitat.sh/v1/depot"
+fi
 
 pkg="$(jq -r '.version.pkg' < "${payload}")"
+origin="$(jq -r '.version.origin' < "${payload}")"
+name="$(jq -r '.version.name' < "${payload}")"
+version="$(jq -r '.version.version' < "${payload}")"
+release="$(jq -r '.version.release' < "${payload}")"
 
-file_name="$(echo ${pkg} | sed 's#/#-#g')-x86_64-linux.hart"
+file_name="${origin}-${name}-${version}-${release}-x86_64-linux.hart"
 
-wget -O "${1}/${file_name}" "${base_uri}/${pkg}/download"
+auth_token="$(jq -r '.source.auth_token // ""' < "${payload}")"
+if [[ ${auth_token} != "" ]]; then
+  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download" --header "Authorization: Bearer ${auth_token}"
+else
+  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download"
+fi
 
-jq -n --arg pkg "${pkg}" '{version: { pkg: $pkg }}' >&3
+jq -n --arg pkg "${pkg}" --arg origin "${origin}" --arg name "${name}" --arg version "${version}" --arg release "${release}" '{version: { pkg: $pkg, origin: $origin, name: $name, version: $version, release: $release }}' >&3

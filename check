@@ -1,4 +1,7 @@
 #!/bin/bash
+# Nomenclature
+# Last: Information coming from current state of the resource in Concourse
+# New: Information pulled from bldr
 
 set -e
 
@@ -11,21 +14,52 @@ payload=$(mktemp /tmp/resource-check.XXXXXX)
 
 cat > "${payload}" <&0
 
-base_uri="https://willem.habitat.sh/v1/depot"
+bldr_url="$(jq -r '.source.bldr_url // ""' < "${payload}")"
+if [[ ${bldr_url} != "" ]]; then
+  base_uri="${bldr_url}/v1/depot"
+else
+  base_uri="https://bldr.habitat.sh/v1/depot"
+fi
 origin="$(jq -r '.source.origin' < "${payload}")"
 name="$(jq -r '.source.name' < "${payload}")"
-version="$(jq -r '.source.version // ""' < "${payload}")"
-if [[ ${version} != "" ]]; then
-  version="/${version}"
-fi
 channel="$(jq -r '.source.channel // "unstable"' < "${payload}")"
 
-latest_version="$(jq -r '.version.pkg' < "${payload}")"
-
-if [[ ${latest_version} == 'null' ]]; then
-  curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}${version}/latest" 2>/dev/null | \
-    jq '.ident | [ .origin, .name, .version, .release ] | [{pkg: join("/")}]' >&3
+auth_token="$(jq -r '.source.auth_token // ""' < "${payload}")"
+if [[ ${auth_token} != "" ]]; then
+  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest" --header "Authorization: Bearer ${auth_token}" 2>/dev/null | jq '.ident')"
 else
-  curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}${version}" 2>/dev/null | \
-    jq --arg current ${latest_version} '[ .data[] | { pkg: [ .origin, .name, .version, .release ] | join("/") | select(. >= $current) } ]' >&3
+  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest"  2>/dev/null | jq '.ident')"
+fi
+
+last_origin="$(jq -r '.version.origin' < "${payload}")"
+last_name="$(jq -r '.version.name' < "${payload}")"
+last_version="$(jq -r '.version.version' < "${payload}")"
+last_release="$(jq -r '.version.release' < "${payload}")"
+last_pkg="$(jq -r '.version.pkg' < "${payload}")"
+new_origin="$(echo "${new_ident}" | jq -r '.origin')"
+new_name="$(echo "${new_ident}" | jq -r '.name')"
+new_version="$(echo "${new_ident}" | jq -r '.version')"
+new_release="$(echo "${new_ident}" | jq -r '.release')"
+new_pkg="$(echo "${new_ident}" | jq -r '[ .origin, .name, .version, .release ] | join("/")')"
+
+new=false
+
+# If any values in the current concourse resource are null, assume new is new
+if [[ ${last_pkg} == 'null' ]] || [[ ${last_origin} == 'null' ]] || [[ ${last_name} == 'null' ]] || [[ ${last_version} == 'null' ]] || [[ ${last_release} == 'null' ]]; then
+  new=true
+# If origin or name don't match, resource definition has changed, so assume new
+elif [[ ${last_origin} != "${new_origin}" ]] || [[ ${last_name} != "${new_name}" ]]; then
+  new=true
+# If version is greater, then we are new
+elif [[ ${new_version} > "${last_version}" ]]; then
+  new=true
+# If we versions are equal, check release
+elif [[ ${new_version} = "${new_version}" ]] && [[ ${new_release} > "${last_release}" ]]; then
+  new=true
+fi
+
+if [[ "${new}" = true ]]; then
+  jq -n --arg pkg "${new_pkg}" --arg origin "${new_origin}" --arg name "${new_name}" --arg version "${new_version}" --arg release "${new_release}" '[ { pkg: $pkg, origin: $origin, name: $name, version: $version, release: $release } ]' >&3
+else
+  jq -n '[]' >&3
 fi
