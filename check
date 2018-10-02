@@ -23,12 +23,13 @@ fi
 origin="$(jq -r '.source.origin' < "${payload}")"
 name="$(jq -r '.source.name' < "${payload}")"
 channel="$(jq -r '.source.channel // "unstable"' < "${payload}")"
+target="$(jq -r '.source.target // "x86_64-linux"' < "${payload}")"
 
 auth_token="$(jq -r '.source.auth_token // ""' < "${payload}")"
 if [[ ${auth_token} != "" ]]; then
-  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest" --header "Authorization: Bearer ${auth_token}" 2>/dev/null | jq '.ident')"
+  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest?target=${target}" --header "Authorization: Bearer ${auth_token}" 2>/dev/null | jq '.ident')"
 else
-  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest"  2>/dev/null | jq '.ident')"
+  new_ident="$(curl "${base_uri}/channels/${origin}/${channel}/pkgs/${name}/latest?target=${target}"  2>/dev/null | jq '.ident')"
 fi
 
 last_origin="$(jq -r '.version.origin' < "${payload}")"

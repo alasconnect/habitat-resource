@@ -23,14 +23,15 @@ origin="$(jq -r '.version.origin' < "${payload}")"
 name="$(jq -r '.version.name' < "${payload}")"
 version="$(jq -r '.version.version' < "${payload}")"
 release="$(jq -r '.version.release' < "${payload}")"
+target="$(jq -r '.source.target // "x86_64-linux"' < "${payload}")"
 
-file_name="${origin}-${name}-${version}-${release}-x86_64-linux.hart"
+file_name="${origin}-${name}-${version}-${release}-${target}.hart"
 
 auth_token="$(jq -r '.source.auth_token // ""' < "${payload}")"
 if [[ ${auth_token} != "" ]]; then
-  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download" --header "Authorization: Bearer ${auth_token}"
+  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download?target=${target}" --header "Authorization: Bearer ${auth_token}"
 else
-  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download"
+  wget -O "${1}/${file_name}" "${base_uri}/pkgs/${pkg}/download?target=${target}"
 fi
 
 jq -n --arg pkg "${pkg}" --arg origin "${origin}" --arg name "${name}" --arg version "${version}" --arg release "${release}" '{version: { pkg: $pkg, origin: $origin, name: $name, version: $version, release: $release }}' >&3
