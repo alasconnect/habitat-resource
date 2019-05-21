@@ -1,8 +1,14 @@
 FROM ubuntu:bionic
 
+ARG CHANNEL=stable
+ARG VERSION=0.79.1
+ARG HAB_NONINTERACTIVE=true
+
 RUN apt-get update && apt-get install -y curl wget jq
 
-RUN curl https://raw.githubusercontent.com/habitat-sh/habitat/master/components/hab/install.sh | bash
+RUN wget https://raw.githubusercontent.com/habitat-sh/habitat/master/components/hab/install.sh -O /tmp/install.sh && \
+    bash /tmp/install.sh -v ${VERSION} -c ${CHANNEL} && \
+    rm /tmp/install.sh
 
 COPY check /opt/resource/check
 COPY in    /opt/resource/in

@@ -25,6 +25,7 @@ channel="$(jq -r '.params.channel // ""' < "${payload}")"
 if [[ ${channel} = "" ]]; then
   channel="$(jq -r '.source.channel // "unstable"' < "${payload}")"
 fi
+target="$(jq -r '.source.target // "x86_64-linux"' < "${payload}")"
 
 echo "Pushing to channel '${channel}'"
 
@@ -69,4 +70,4 @@ hab pkg upload -c "${channel}" "${file}"
 
 jq -n --arg pkg "${pkg}" --arg origin "${hart_origin}" --arg name "${hart_name}" --arg version "${version}" --arg release "${release}" '{version: { pkg: $pkg, origin: $origin, name: $name, version: $version, release: $release }}' >&3
 
-hab pkg promote "${pkg}" "${channel}"
+hab pkg promote "${pkg}" "${channel}" "${target}"
